@@ -1,0 +1,115 @@
+
+name: AI DevSecOps Security Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    name: AI Application Security Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Setup Python
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # ==========================================
+      # GATE 1: BANDIT STATIC APPLICATION SECURITY
+      # ==========================================
+      - name: Gate 1 - Bandit SAST
+        id: bandit
+        continue-on-error: true
+        run: |
+          python -m pip install bandit
+          bandit -r . -lll
+
+      # ==========================================
+      # GATE 2: SAFETY DEPENDENCY VULNERABILITY SCAN
+      # ==========================================
+      - name: Gate 2 - Safety Dependency Scan
+        id: safety
+        continue-on-error: true
+        run: |
+          python -m pip install "safety==2.3.5"
+          safety check -r requirements.txt
+
+      # ==========================================
+      # GATE 3: GITLEAKS SECRET DETECTION
+      # ==========================================
+      - name: Gate 3 - Gitleaks Secret Scan
+        id: gitleaks
+        continue-on-error: true
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      # ==========================================
+      # GATE 4: CUSTOM PROMPT INJECTION SCANNER
+      # ==========================================
+      - name: Gate 4 - Prompt Injection Scanner
+        id: injection
+        continue-on-error: true
+        run: |
+          python inject_scanner.py
+
+      # ==========================================
+      # FINAL PIPELINE RESULT
+      # ==========================================
+      - name: Evaluate Security Gates
+        if: always()
+        env:
+          BANDIT_RESULT: ${{ steps.bandit.outcome }}
+          SAFETY_RESULT: ${{ steps.safety.outcome }}
+          GITLEAKS_RESULT: ${{ steps.gitleaks.outcome }}
+          INJECTION_RESULT: ${{ steps.injection.outcome }}
+        run: |
+          failed=0
+
+          echo "================================"
+          echo "SECURITY PIPELINE SUMMARY"
+          echo "================================"
+
+          check_gate() {
+            name="$1"
+            result="$2"
+
+            if [ "$result" = "success" ]; then
+              echo "[PASS] $name"
+            else
+              echo "[FAIL] $name ($result)"
+              failed=1
+            fi
+          }
+
+          check_gate "Bandit SAST" "$BANDIT_RESULT"
+          check_gate "Safety Dependency Scan" "$SAFETY_RESULT"
+          check_gate "Gitleaks Secret Scan" "$GITLEAKS_RESULT"
+          check_gate "Prompt Injection Scanner" "$INJECTION_RESULT"
+
+          echo "================================"
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Security pipeline failed."
+            exit 1
+          fi
+
+          echo "All four security gates passed."
+

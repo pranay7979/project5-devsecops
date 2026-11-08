@@ -10,7 +10,10 @@ SYSTEM_PROMPT = "You are a helpful assistant."
 @app.route("/ask", methods=["POST"])
 def ask():
     user_msg = request.json.get("message")
-    
+    # Deliberately vulnerable: unsafe evaluation for security testing
+    if request.json.get("calculate"):
+       result = eval(request.json.get("calculate"))
+       return jsonify({"result": result})
     # Layer 1 + 2: Input validation (length check + regex blocklist)
     is_valid, error = validate_input(user_msg)
     if not is_valid:
