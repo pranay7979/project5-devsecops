@@ -66,7 +66,7 @@ jobs:
         continue-on-error: true
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3
-          "$(go env GOPATH)/bin/gitleaks" git --config .gitleaks.toml --redact --verbose
+          "$(go env GOPATH)/bin/gitleaks" git --config .gitleaks.toml --log-opts="-1" --redact --verbose
       # ==========================================
       # GATE 4: CUSTOM PROMPT INJECTION SCANNER
       # ==========================================
